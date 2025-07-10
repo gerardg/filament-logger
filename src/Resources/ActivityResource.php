@@ -16,6 +16,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\ViewField;
 use Filament\Schemas\Schema;
 use BackedEnum;
 use Spatie\Activitylog\Contracts\Activity;
@@ -104,30 +105,34 @@ class ActivityResource extends Resource
                     }
                 }),
 
-            KeyValue::make('old')
-                ->label(__('filament-logger::filament-logger.resource.label.old'))
+            ViewField::make('changes_table')
+                ->label('Changes')
+                ->columnSpanFull()
                 ->visible(function (?Model $record): bool {
                     /** @var Activity&ActivityModel $record */
-                    return $record?->properties?->get('old') !== null;
+                    $hasOld = $record?->properties?->get('old') !== null;
+                    $hasNew = $record?->properties?->get('attributes') !== null;
+                    return $hasOld || $hasNew;
                 })
-                ->afterStateHydrated(function (KeyValue $component, ?Model $record) {
+                ->view('filament-logger.changes-table')
+                ->viewData(function (?Model $record): array {
                     /** @var Activity&ActivityModel $record */
-                    if ($old = $record?->properties?->get('old')) {
-                        $component->state($old);
+                    $oldValues = $record?->properties?->get('old', []) ?? [];
+                    $newValues = $record?->properties?->get('attributes', []) ?? [];
+                    
+                    // Combine all keys from both old and new values
+                    $allKeys = array_unique(array_merge(array_keys($oldValues), array_keys($newValues)));
+                    
+                    $changes = [];
+                    foreach ($allKeys as $key) {
+                        $changes[] = [
+                            'key' => $key,
+                            'old_value' => $oldValues[$key] ?? '-',
+                            'new_value' => $newValues[$key] ?? '-',
+                        ];
                     }
-                }),
-
-            KeyValue::make('attributes')
-                ->label(__('filament-logger::filament-logger.resource.label.new'))
-                ->visible(function (?Model $record): bool {
-                    /** @var Activity&ActivityModel $record */
-                    return $record?->properties?->get('attributes') !== null;
-                })
-                ->afterStateHydrated(function (KeyValue $component, ?Model $record) {
-                    /** @var Activity&ActivityModel $record */
-                    if ($attributes = $record?->properties?->get('attributes')) {
-                        $component->state($attributes);
-                    }
+                    
+                    return ['changes' => $changes];
                 }),
         ];
     }
