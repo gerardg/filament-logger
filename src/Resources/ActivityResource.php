@@ -2,14 +2,11 @@
 
 namespace Z3d0X\FilamentLogger\Resources;
 
-use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
 use Filament\Facades\Filament;
 use Filament\Resources\Resource;
 use Filament\Tables\Filters\Filter;
-use Filament\Forms\Components\Group;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Columns\TextColumn;
@@ -19,6 +16,8 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Forms\Components\Placeholder;
+use Filament\Schemas\Schema;
+use BackedEnum;
 use Spatie\Activitylog\Contracts\Activity;
 use Spatie\Activitylog\ActivitylogServiceProvider;
 use Spatie\Activitylog\Models\Activity as ActivityModel;
@@ -29,7 +28,7 @@ class ActivityResource extends Resource
     protected static ?string $label = 'Activity Log';
     protected static ?string $slug = 'activity-logs';
 
-    protected static ?string $navigationIcon = 'heroicon-o-clipboard-list';
+    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-clipboard-list';
 
 
     public static function getCluster(): ?string
@@ -37,90 +36,100 @@ class ActivityResource extends Resource
         return config('filament-logger.resources.cluster');
     }
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form
-            ->schema([
-                Group::make([
-                    Section::make([
-                        TextInput::make('causer_id')
-                            ->afterStateHydrated(function ($component, ?Model $record) {
-                                /** @phpstan-ignore-next-line */
-                                return $component->state($record->causer?->name);
-                            })
-                            ->label(__('filament-logger::filament-logger.resource.label.user')),
+        return $schema
+            ->components([
+                TextInput::make('causer_id')
+                    ->afterStateHydrated(function ($component, ?Model $record) {
+                        /** @phpstan-ignore-next-line */
+                        return $component->state($record->causer?->name);
+                    })
+                    ->label(__('filament-logger::filament-logger.resource.label.user')),
 
-                        TextInput::make('subject_type')
-                            ->afterStateHydrated(function ($component, ?Model $record, $state) {
-                                /** @var Activity&ActivityModel $record */
-                                return $state ? $component->state(Str::of($state)->afterLast('\\')->headline().' # '.$record->subject_id) : '-';
-                            })
-                            ->label(__('filament-logger::filament-logger.resource.label.subject')),
-
-                        Textarea::make('description')
-                            ->label(__('filament-logger::filament-logger.resource.label.description'))
-                            ->rows(2)
-                            ->columnSpan('full'),
-                    ])
-                    ->columns(2),
-                ])
-                ->columnSpan(['sm' => 3]),
-
-                Group::make([
-                    Section::make([
-                        Placeholder::make('log_name')
-                            ->content(function (?Model $record): string {
-                                /** @var Activity&ActivityModel $record */
-                                return $record->log_name ? ucwords($record->log_name) : '-';
-                            })
-                            ->label(__('filament-logger::filament-logger.resource.label.type')),
-
-                        Placeholder::make('event')
-                            ->content(function (?Model $record): string {
-                                /** @phpstan-ignore-next-line */
-                                return $record?->event ? ucwords($record?->event) : '-';
-                            })
-                            ->label(__('filament-logger::filament-logger.resource.label.event')),
-
-                        Placeholder::make('created_at')
-                            ->label(__('filament-logger::filament-logger.resource.label.logged_at'))
-                            ->content(function (?Model $record): string {
-                                /** @var Activity&ActivityModel $record */
-                                return $record->created_at ? "{$record->created_at->format(config('filament-logger.datetime_format', 'd/m/Y H:i:s'))}" : '-';
-                            }),
-                    ])
-                ]),
-                Section::make()
-                    ->columns()
-                    ->visible(fn ($record) => $record->properties?->count() > 0)
-                    ->schema(function (?Model $record) {
+                TextInput::make('subject_type')
+                    ->afterStateHydrated(function ($component, ?Model $record, $state) {
                         /** @var Activity&ActivityModel $record */
-                        $properties = $record->properties->except(['attributes', 'old']);
+                        return $state ? $component->state(Str::of($state)->afterLast('\\')->headline().' # '.$record->subject_id) : '-';
+                    })
+                    ->label(__('filament-logger::filament-logger.resource.label.subject')),
 
-                        $schema = [];
+                Textarea::make('description')
+                    ->label(__('filament-logger::filament-logger.resource.label.description'))
+                    ->rows(2)
+                    ->columnSpanFull(),
 
-                        if ($properties->count()) {
-                            $schema[] = KeyValue::make('properties')
-                                ->label(__('filament-logger::filament-logger.resource.label.properties'))
-                                ->columnSpan('full');
-                        }
+                Placeholder::make('log_name')
+                    ->content(function (?Model $record): string {
+                        /** @var Activity&ActivityModel $record */
+                        return $record->log_name ? ucwords($record->log_name) : '-';
+                    })
+                    ->label(__('filament-logger::filament-logger.resource.label.type')),
 
-                        if ($old = $record->properties->get('old')) {
-                            $schema[] = KeyValue::make('old')
-                                ->afterStateHydrated(fn (KeyValue $component) => $component->state($old))
-                                ->label(__('filament-logger::filament-logger.resource.label.old'));
-                        }
+                Placeholder::make('event')
+                    ->content(function (?Model $record): string {
+                        /** @phpstan-ignore-next-line */
+                        return $record?->event ? ucwords($record?->event) : '-';
+                    })
+                    ->label(__('filament-logger::filament-logger.resource.label.event')),
 
-                        if ($attributes = $record->properties->get('attributes')) {
-                            $schema[] = KeyValue::make('attributes')
-                                ->afterStateHydrated(fn (KeyValue $component) => $component->state($attributes))
-                                ->label(__('filament-logger::filament-logger.resource.label.new'));
-                        }
-
-                        return $schema;
+                Placeholder::make('created_at')
+                    ->label(__('filament-logger::filament-logger.resource.label.logged_at'))
+                    ->content(function (?Model $record): string {
+                        /** @var Activity&ActivityModel $record */
+                        return $record->created_at ? "{$record->created_at->format(config('filament-logger.datetime_format', 'd/m/Y H:i:s'))}" : '-';
                     }),
-            ])
-            ->columns(['sm' => 4, 'lg' => null]);
+
+                ...static::getPropertiesComponents(),
+            ]);
+    }
+
+    private static function getPropertiesComponents(): array
+    {
+        return [
+            KeyValue::make('properties')
+                ->label(__('filament-logger::filament-logger.resource.label.properties'))
+                ->columnSpanFull()
+                ->visible(function (?Model $record): bool {
+                    /** @var Activity&ActivityModel $record */
+                    return $record?->properties?->except(['attributes', 'old'])?->count() > 0;
+                })
+                ->afterStateHydrated(function (KeyValue $component, ?Model $record) {
+                    /** @var Activity&ActivityModel $record */
+                    if ($record?->properties) {
+                        $properties = $record->properties->except(['attributes', 'old']);
+                        if ($properties->count()) {
+                            $component->state($properties->toArray());
+                        }
+                    }
+                }),
+
+            KeyValue::make('old')
+                ->label(__('filament-logger::filament-logger.resource.label.old'))
+                ->visible(function (?Model $record): bool {
+                    /** @var Activity&ActivityModel $record */
+                    return $record?->properties?->get('old') !== null;
+                })
+                ->afterStateHydrated(function (KeyValue $component, ?Model $record) {
+                    /** @var Activity&ActivityModel $record */
+                    if ($old = $record?->properties?->get('old')) {
+                        $component->state($old);
+                    }
+                }),
+
+            KeyValue::make('attributes')
+                ->label(__('filament-logger::filament-logger.resource.label.new'))
+                ->visible(function (?Model $record): bool {
+                    /** @var Activity&ActivityModel $record */
+                    return $record?->properties?->get('attributes') !== null;
+                })
+                ->afterStateHydrated(function (KeyValue $component, ?Model $record) {
+                    /** @var Activity&ActivityModel $record */
+                    if ($attributes = $record?->properties?->get('attributes')) {
+                        $component->state($attributes);
+                    }
+                }),
+        ];
     }
 
     public static function table(Table $table): Table
